@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-func CalendarObjectToEventArray(calendarObjects []caldav.CalendarObject, timezone string) ([]dto.Event, error) {
+func CalendarObjectToEventArray(calendarObjects []caldav.CalendarObject, userTimeZone string) ([]dto.Event, error) {
 	eventById := make(map[string]dto.Event)
 	for _, calendarObject := range calendarObjects {
 		for _, e := range calendarObject.Data.Events() {
@@ -17,26 +17,33 @@ func CalendarObjectToEventArray(calendarObjects []caldav.CalendarObject, timezon
 			if _, ok := eventById[eventId]; ok {
 				continue
 			}
+			timezone, err := GetTimezone(calendarObject)
 			location, _ := time.LoadLocation(timezone)
+
+			userLocation, err := time.LoadLocation(userTimeZone)
+			tzName, tzOffset := time.Now().In(userLocation).Zone()
+			changeTZ := time.FixedZone(tzName, tzOffset)
+
 			eventName, _ := e.Props.Text("SUMMARY")
 			eventDescription, _ := e.Props.Text("DESCRIPTION")
 			eventUrl := util.GetPropertyValue(e.Props.Get("URL"))
 
-			startTime, err := e.Props.DateTime("DTSTART", location)
+			getStartTime, err := e.Props.DateTime("DTSTART", location)
+			startTime := getStartTime.In(changeTZ)
 			if err != nil {
 				return nil, errors.Wrap(err, "Can't parse DTSTART for event "+eventName)
 			}
 
-			endTime, err := e.Props.DateTime("DTEND", location)
+			getEndTime, err := e.Props.DateTime("DTEND", location)
+			endTime := getEndTime.In(changeTZ)
 			if err != nil {
 				return nil, errors.Wrap(err, "Can't parse DTEND for event "+eventName)
 			}
-
-			lastModifiedTime, err := e.Props.DateTime("LAST-MODIFIED", location)
+			getLastModifiedTime, err := e.Props.DateTime("LAST-MODIFIED", location)
+			lastModifiedTime := getLastModifiedTime.In(changeTZ)
 			if err != nil {
 				return nil, errors.Wrap(err, "Can't parse LAST-MODIFIED for event "+eventName)
 			}
-
 			eventById[eventId] = *dto.NewEvent(
 				eventId,
 				eventName,
@@ -56,15 +63,10 @@ func CalendarObjectToEventArray(calendarObjects []caldav.CalendarObject, timezon
 	return events, nil
 }
 
-func GetTimezone(calendarObjects []caldav.CalendarObject) (string, error) {
-	if len(calendarObjects) == 0 {
-		return "Etc/UTC", nil
-	}
-	for _, calendarObject := range calendarObjects {
-		for _, child := range calendarObject.Data.Children {
-			if child.Name == ical.CompTimezone {
-				return child.Props.Text("TZID")
-			}
+func GetTimezone(calendarObject caldav.CalendarObject) (string, error) {
+	for _, child := range calendarObject.Data.Children {
+		if child.Name == ical.CompTimezone {
+			return child.Props.Text("TZID")
 		}
 	}
 	return "Etc/UTC", errors.New("Timezone not found")

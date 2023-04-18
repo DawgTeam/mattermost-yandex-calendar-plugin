@@ -107,10 +107,11 @@ func (c *Calendar) LoadCalendarUpdates(userId string) ([]dto.Event, []dto.Event)
 
 func (c *Calendar) loadTodayEvents(userId string) ([]dto.Event, error) {
 	start, end := c.GetTodayDateTimes(userId)
-	return c.LoadEvents(userId, start, end)
+	userSettings := repository.GetSettings(c.pluginAPI, userId)
+	return c.LoadEvents(userId, start, end, userSettings.TimeZone)
 }
 
-func (c *Calendar) LoadEvents(userId string, start time.Time, end time.Time) ([]dto.Event, error) {
+func (c *Calendar) LoadEvents(userId string, start time.Time, end time.Time, userTimeZone string) ([]dto.Event, error) {
 	var events []dto.Event
 	userSettings := repository.GetSettings(c.pluginAPI, userId)
 	client, err := c.getClient(userId)
@@ -123,11 +124,10 @@ func (c *Calendar) LoadEvents(userId string, start time.Time, end time.Time) ([]
 		c.logger.LogError("Can't get events for calendar "+userSettings.Calendar, &userId, err)
 		return events, errors.New("Can't get events from calendar")
 	}
-	timezone, err := convertor.GetTimezone(calendarObjects)
 	if err != nil {
 		c.logger.LogWarn("Can't get timezone for calendar "+userSettings.Calendar, &userId, err)
 	}
-	eventDtos, err := convertor.CalendarObjectToEventArray(calendarObjects, timezone)
+	eventDtos, err := convertor.CalendarObjectToEventArray(calendarObjects, userTimeZone)
 	if err != nil {
 		c.logger.LogWarn("Can't parse events for calendar "+userSettings.Calendar, &userId, err)
 		return events, errors.New("Can't parse events from calendar")

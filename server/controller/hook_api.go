@@ -170,6 +170,7 @@ func (hc *HookController) summary(args *model.CommandArgs) {
 	}
 
 	userNow := time.Now().In(userSettings.GetUserLocation())
+	userTimeZone := userSettings.TimeZone
 	var start, end time.Time
 	var title string
 
@@ -197,7 +198,7 @@ func (hc *HookController) summary(args *model.CommandArgs) {
 		title = conf.GetEventsTitle("", start)
 	}
 
-	events, err := hc.calendar.LoadEvents(userId, start, end)
+	events, err := hc.calendar.LoadEvents(userId, start, end, userTimeZone)
 	if err != nil {
 		hc.sender.SendBotDMPost(userId, ":no_entry_sign: Catch error on load events")
 		return
